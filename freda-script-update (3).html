@@ -1,0 +1,126 @@
+<!--
+  PASTE THIS in your freda-music-school.html, replacing the existing
+  <script> ... </script> block at the very bottom of the file
+  (the one that starts with "// ---------- Hero slideshow ----------").
+
+  Everything is unchanged except the form-handling section, which now
+  also opens a pre-filled WhatsApp tab addressed to the studio number
+  alongside the existing email send.
+-->
+<script>
+// ---------- Hero slideshow ----------
+(function(){
+  const imgs = document.querySelectorAll('#heroSlides img');
+  const dotsWrap = document.getElementById('slideDots');
+  imgs.forEach((_,i)=>{
+    const d = document.createElement('i');
+    if(i===0) d.classList.add('active');
+    dotsWrap.appendChild(d);
+  });
+  const dots = dotsWrap.querySelectorAll('i');
+  let idx = 0;
+  setInterval(()=>{
+    imgs[idx].classList.remove('active');
+    dots[idx].classList.remove('active');
+    idx = (idx+1) % imgs.length;
+    imgs[idx].classList.add('active');
+    dots[idx].classList.add('active');
+  }, 5000);
+})();
+
+// ---------- Scroll reveal ----------
+(function(){
+  const els = document.querySelectorAll('.reveal');
+  const obs = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('in'); });
+  }, {threshold:0.15});
+  els.forEach(el=>obs.observe(el));
+})();
+
+// ---------- Form handling: emails every application AND opens a pre-filled WhatsApp message ----------
+const SITE_EMAIL = 'fredasteve1@gmail.com';
+const STUDIO_WHATSAPP = '2348112322420'; // same number shown in the contact section — change if needed
+
+const FIELD_LABELS = {
+  name: 'Name',
+  email: 'Email',
+  phone: 'WhatsApp number',
+  instrument: 'Instrument',
+  level: 'Level',
+  mode: 'Lesson mode',
+  message: 'Message',
+  experience: 'Years teaching',
+  rate: 'Hourly rate (USD)',
+  bio: 'Bio'
+};
+
+function buildWhatsAppText(subjectLabel, formData){
+  const lines = [subjectLabel + ':'];
+  formData.forEach((value, key) => {
+    if(!value) return;
+    const label = FIELD_LABELS[key] || key;
+    lines.push(label + ': ' + value);
+  });
+  return lines.join('\n');
+}
+
+function handleForm(formId, msgId, storagePrefix, subjectLabel){
+  const form = document.getElementById(formId);
+  const msg = document.getElementById(msgId);
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const btn = form.querySelector('.submit-btn');
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Sending...';
+    msg.classList.remove('show','ok','err');
+
+    // Open WhatsApp first, synchronously — this still counts as a direct
+    // result of the click. Browsers block popups opened after an await.
+    const waText = buildWhatsAppText(subjectLabel, new FormData(form));
+    window.open('https://wa.me/' + STUDIO_WHATSAPP + '?text=' + encodeURIComponent(waText), '_blank');
+
+    const payload = new FormData(form);
+    payload.append('_subject', subjectLabel + ' — Freda Music School');
+    payload.append('_template', 'table');
+    payload.append('_captcha', 'false');
+
+    let emailSent = false;
+    try{
+      const res = await fetch('https://formsubmit.co/ajax/' + SITE_EMAIL, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: payload
+      });
+      emailSent = res.ok;
+    }catch(err){
+      emailSent = false;
+    }
+
+    // Best-effort local backup copy. Never blocks or changes the result shown to the user.
+    try{
+      if (typeof window.storage !== 'undefined'){
+        const data = {};
+        new FormData(form).forEach((v,k)=> data[k]=v);
+        data.submittedAt = new Date().toISOString();
+        const key = storagePrefix + ':' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+        await window.storage.set(key, JSON.stringify(data), true);
+      }
+    }catch(err){ /* silent: backup only */ }
+
+    if (emailSent){
+      msg.textContent = "Sent — tap send in the WhatsApp tab that just opened, and we'll reach out soon.";
+      msg.classList.add('show','ok');
+      form.reset();
+    }else{
+      msg.textContent = "Couldn't send the email just now — please tap send in the WhatsApp tab, or message us directly.";
+      msg.classList.add('show','err');
+    }
+    btn.disabled = false;
+    btn.textContent = originalText;
+  });
+}
+
+handleForm('studentForm','studentMsg','students','New Student Application');
+handleForm('tutorForm','tutorMsg','tutors','New Tutor Application');
+</script>
